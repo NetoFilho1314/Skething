@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carregar Imagens do Post</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 5px;
+            background-color: #f4f4f4;
+        }
+        #content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .image-container {
+            margin-bottom: 5px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+        }
+        .image-container img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 3px;
+        }
+        .loader-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100px;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease-out;
+        }
+        .dialog {
+            background-color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            transform: scale(0.9);
+            transition: transform 0.3s ease-out;
+            max-width: 90%;
+        }
+        .dialog img {
+            max-width: 100%;
+            max-height: 60vh;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .dialog button {
+            margin: 0 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        .dialog button:first-child {
+            background-color: #3498db;
+            color: white;
+        }
+        .dialog button:last-child {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .dialog button:hover {
+            opacity: 0.8;
+        }
+        .chapter-end {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(46, 204, 113, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            opacity: 0;
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div id="content">
+        <div class="loader-container">
+            <div class="loader"></div>
+        </div>
+    </div>
+
+    <script>
+        let images = [];
+        let loadedImages = 0;
+        const contentDiv = document.getElementById('content');
+        let chapterEndShown = false;
+
+        async function loadContent() {
+            try {
+                const response = await fetch('https://hentaicomics.biz/boku-no-hero-academia/rumi-usagiyama/', {
+                    mode: 'cors'
+                });
+                const text = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const singlePostDiv = doc.querySelector('.single-post');
+
+                if (singlePostDiv) {
+                    images = Array.from(singlePostDiv.querySelectorAll('img'));
+                    contentDiv.innerHTML = '';
+                    loadMoreImages();
+                    window.addEventListener('scroll', checkScroll);
+                } else {
+                    showError('Conteúdo não encontrado.');
+                }
+            } catch (error) {
+                showError('Falha ao carregar o conteúdo. Por favor, tente novamente mais tarde.');
+                console.error(error);
+            }
+        }
+
+        function loadMoreImages() {
+            const remainingImages = images.slice(loadedImages);
+            const imagesToLoad = remainingImages.slice(0, 5);
+
+            imagesToLoad.forEach((img, index) => {
+                const container = document.createElement('div');
+                container.className = 'image-container';
+                const imgClone = img.cloneNode(true);
+                container.appendChild(imgClone);
+                contentDiv.appendChild(container);
+
+                imgClone.onload = () => {
+                    setTimeout(() => {
+                        container.style.opacity = '1';
+                        container.style.transform = 'translateY(0)';
+                    }, index * 100);
+                };
+
+                setupLongPress(imgClone);
+            });
+
+            loadedImages += imagesToLoad.length;
+
+            if (loadedImages >= images.length) {
+                const loader = document.querySelector('.loader-container');
+                if (loader) {
+                    loader.remove();
+                }
+                showChapterEndMessage();
+            }
+        }
+
+        function checkScroll() {
+            if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+                loadMoreImages();
+            }
+        }
+
+        function setupLongPress(img) {
+            let timer;
+            img.addEventListener('touchstart', (e) => {
+                timer = setTimeout(() => {
+                    showDownloadDialog(img.src);
+                }, 500);
+            });
+
+            img.addEventListener('touchend', () => {
+                clearTimeout(timer);
+            });
+
+            img.addEventListener('touchmove', () => {
+                clearTimeout(timer);
+            });
+        }
+
+        function showDownloadDialog(imageSrc) {
+            const dialog = document.createElement('div');
+            dialog.className = 'dialog-overlay';
+            dialog.innerHTML = `
+                <div class="dialog">
+                    <img src="${imageSrc}" alt="Imagem Selecionada">
+                    <p>Deseja baixar esta imagem?</p>
+                    <button onclick="downloadImage('${imageSrc}')">Sim</button>
+                    <button onclick="closeDialog()">Não</button>
+                </div>
+            `;
+            document.body.appendChild(dialog);
+            setTimeout(() => {
+                dialog.style.opacity = '1';
+                dialog.querySelector('.dialog').style.transform = 'scale(1)';
+            }, 10);
+        }
+
+        function closeDialog() {
+            const dialog = document.querySelector('.dialog-overlay');
+            if (dialog) {
+                dialog.style.opacity = '0';
+                dialog.querySelector('.dialog').style.transform = 'scale(0.9)';
+                setTimeout(() => {
+                    dialog.remove();
+                }, 300);
+            }
+        }
+
+        function downloadImage(imageSrc) {
+            const link = document.createElement('a');
+            link.href = imageSrc;
+            link.download = 'imagem.jpg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            closeDialog();
+        }
+
+        function showError(message) {
+            contentDiv.innerHTML = `<p style="color: #e74c3c; text-align: center; font-weight: bold;">${message}</p>`;
+        }
+
+        function showChapterEndMessage() {
+            if (!chapterEndShown) {
+                chapterEndShown = true;
+                const message = document.createElement('div');
+                message.className = 'chapter-end';
+                message.textContent = 'Fim de capítulo';
+                document.body.appendChild(message);
+                setTimeout(() => {
+                    message.style.opacity = '1';
+                    message.style.transform = 'translateX(-50%) translateY(-20px)';
+                }, 100);
+                setTimeout(() => {
+                    message.style.opacity = '0';
+                    message.style.transform = 'translateX(-50%) translateY(0)';
+                    setTimeout(() => {
+                        message.remove();
+                    }, 300);
+                }, 3000);
+            }
+        }
+
+        loadContent();
+    </script>
+</body>
+</html>
